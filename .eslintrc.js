@@ -18,4 +18,5 @@ module.exports = {
     // "error" 或 2 - 开启规则，使用错误级别的错误：error (当被触发的时候，程序会退出)
     "no-var": 2, // 不能使用 var 定义变量
   },
+  plugins: ['import'] // 解决动态导入语法报错
 };

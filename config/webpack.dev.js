@@ -16,7 +16,11 @@ module.exports = {
     // 开发模式没有输出
     path: undefined,
     // filename: 入口文件打包输出文件名
-    filename: 'static/js/main.js', // 将 js 文件输出到 static/js 目录中
+    filename: 'static/js/[name].js', // 将 js 文件输出到 static/js 目录中
+    // 给打包输出的其他文件命名
+    chunkFilename: 'static/js/[name].chunk.js',
+    // 图片、字体等通过type:asset处理资源命名方式
+    assetModuleFilename: "static/media/[hash:10][ext][query]",
     // clean: true // 自动清空上次的打包内容 原理：打包前 将path整个目录清空 再进行打包  devserver无输出 所以这里可以不用写
   },
   // 加载器
@@ -73,21 +77,21 @@ module.exports = {
               maxSize: 10 * 1024 // 10kb
             }
           },
-          generator: { // 将图片资源输出到指定目录
-            // 将图片文件输出到 static/imgs 目录中
-            // 将图片文件命名 [hash:8][ext][query]
-            // [hash:8]: hash值取8位
-            // [ext]: 使用之前的文件扩展名
-            // [query]: 添加之前的query参数
-            filename: 'static/images/[hash:10][ext][query]'
-          }
+          // generator: { // 将图片资源输出到指定目录 在上方output配置assetModuleFilename 也可以
+          //   // 将图片文件输出到 static/imgs 目录中
+          //   // 将图片文件命名 [hash:8][ext][query]
+          //   // [hash:8]: hash值取8位
+          //   // [ext]: 使用之前的文件扩展名
+          //   // [query]: 添加之前的query参数
+          //   filename: 'static/images/[hash:10][ext][query]'
+          // }
         },
         {
           test: /\.(ttf|woff2?|map3|map4|avi)$/,
           type: 'asset/resource',
-          generator: {
-            filename: 'static/media/[hash:10][ext][query]'
-          }
+          // generator: {
+          //   filename: 'static/media/[hash:10][ext][query]'
+          // }
         },
         {
           test: /\.js$/,
@@ -135,7 +139,7 @@ module.exports = {
     host: "localhost", // 启动服务器域名
     port: "3000", // 启动服务器端口号
     open: true, // 是否自动打开浏览器
-    hot: true, // 开启HMR功能（只能用于开发环境，生产环境不需要了）
+    hot: true, // 开启HMR功能（只能用于开发环境，生产环境不需要 且css默认已经开启）
   },
   // 模式
   mode: 'development', // 开发模式

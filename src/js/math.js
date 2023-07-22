@@ -6,3 +6,6 @@ export function add (a, b) {
 export function mul (a, b) {
   return a * b
 }
+export function chu (a, b) {
+  return a / b
+}

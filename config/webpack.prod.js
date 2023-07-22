@@ -12,7 +12,8 @@ const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
 const TereserPlugin = require("terser-webpack-plugin"); // 内置的插件不需要安装 生产环境默认开启 但这里引入是为了做一些额外的配置
 // 压缩img
 const ImageMinimizerPlugin = require("image-minimizer-webpack-plugin");
-
+const PreloadWebpackPlugin = require("@vue/preload-webpack-plugin"); // 在浏览器空闲时间，加载后续需要使用的资源
+const WorkboxPlugin = require("workbox-webpack-plugin"); //断网访问
 const threads = os.cpus().length //cpu核数
 // 用来获取处理样式的loader
 function getStyleLoader(pre) {
@@ -43,7 +44,11 @@ module.exports = {
     // __dirname 当前文件的文件夹绝对路径
     path: path.resolve(__dirname, '../devdist'),
     // filename: 入口文件打包输出文件名
-    filename: 'static/js/main.js', // 将 js 文件输出到 static/js 目录中
+    filename: 'static/js/[name].[contenthash:10].js', // 将 js 文件输出到 static/js 目录中
+    // 给打包输出的其他文件命名
+    chunkFilename: 'static/js/[name].[contenthash:10].chunk.js',
+    // 图片、字体等通过type:asset处理资源命名方式
+    assetModuleFilename: "static/media/[hash:10][ext][query]",
     clean: true // 自动清空上次的打包内容 原理：打包前 将path整个目录清空 再进行打包  devserver无输出 所以这里可以不用写
   },
   // 加载器
@@ -85,21 +90,21 @@ module.exports = {
                 maxSize: 10 * 1024 // 10kb
               }
             },
-            generator: { // 将图片资源输出到指定目录
-              // 将图片文件输出到 static/imgs 目录中
-              // 将图片文件命名 [hash:8][ext][query]
-              // [hash:8]: hash值取8位
-              // [ext]: 使用之前的文件扩展名
-              // [query]: 添加之前的query参数
-              filename: 'static/images/[hash:10][ext][query]'
-            }
+            // generator: { // 将图片资源输出到指定目录 在上方output配置assetModuleFilename 也可以
+            //   // 将图片文件输出到 static/imgs 目录中
+            //   // 将图片文件命名 [hash:8][ext][query]
+            //   // [hash:8]: hash值取8位
+            //   // [ext]: 使用之前的文件扩展名
+            //   // [query]: 添加之前的query参数
+            //   filename: 'static/images/[hash:10][ext][query]'
+            // }
           },
           {
             test: /\.(ttf|woff2?|map3|map4|avi)$/,
             type: 'asset/resource',
-            generator: {
-              filename: 'static/media/[hash:10][ext][query]'
-            }
+            // generator: { // 在上方output配置assetModuleFilename 也可以
+            //   filename: 'static/media/[hash:10][ext][query]'
+            // }
           },
           {
             test: /\.js$/,
@@ -142,7 +147,24 @@ module.exports = {
       template: path.resolve(__dirname, '../public/index.html')
     }),
     new MiniCssExtractPlugin({
-      filename: 'static/css/main.css'
+      // fullhash（webpack4 是 hash） 每次修改任何一个文件，所有文件名的 hash 至都将改变。所以一旦修改了任何一个文件，整个项目的文件缓存都将失效。
+      // chunkhash 根据不同的入口文件(Entry)进行依赖文件解析、构建对应的 chunk，生成对应的哈希值。我们 js 和 css 是同一个引入，会共享一个 hash 值。
+      // contenthash 根据文件内容生成 hash 值，只有文件内容变化了，hash 值才会变化。所有文件 hash 值是独享且不同的。
+      filename: 'static/css/[name].[contenthash:10].css',
+      chunkFilename: 'static/css/[name].[contenthash:10].chunk.css'
+    }),
+    new PreloadWebpackPlugin({
+      // Preload加载优先级高，Prefetch加载优先级低。
+      // Preload只能加载当前页面需要使用的资源，Prefetch可以加载当前页面资源，也可以加载下一个页面需要使用的资源。
+      // rel: "preload", // preload兼容性更好
+      // as: "script", // 会生成一个rel为script的link标签  <link href="static/js/math.chunk.js" rel="preload" as="script">
+      rel: 'prefetch' // prefetch兼容性更差 <link href="static/js/math.chunk.js" rel="prefetch">
+    }),
+    new WorkboxPlugin.GenerateSW({
+      // 这些选项帮助快速启用 ServiceWorkers
+      // 不允许遗留任何“旧的” ServiceWorkers
+      clientsClaim: true,
+      skipWaiting: true,
     }),
     // css压缩也可以写到optimization.minimizer里面，效果一样的
     // new CssMinimizerPlugin(),
@@ -158,7 +180,7 @@ module.exports = {
       new TereserPlugin({ // 生产模式会默认开启TerserPlugin，但是我们需要进行多进程等配置，就要重新写了
         parallel: threads // 开启多进程和设置进程数量
       }),
-      // 压缩图片
+      // 压缩图片 - 会导致速度变慢 - 暂时注释
       new ImageMinimizerPlugin({
         minimizer: {
           implementation: ImageMinimizerPlugin.imageminGenerate,
@@ -186,9 +208,55 @@ module.exports = {
           },
         },
       }),
-    ]
+    ],
+    // 代码分割配置 - 配置详解
+    // splitChunks: {
+    //   chunks: "all", // 对所有模块都进行分割
+    //   // 以下是默认值
+    //   // minSize: 20000, // 分割代码最小的大小
+    //   // minRemainingSize: 0, // 类似于minSize，最后确保提取的文件大小不能为0
+    //   // minChunks: 1, // 至少被引用的次数，满足条件才会代码分割
+    //   // maxAsyncRequests: 30, // 按需加载时并行加载的文件的最大数量
+    //   // maxInitialRequests: 30, // 入口js文件最大并行请求数量
+    //   // enforceSizeThreshold: 50000, // 超过50kb一定会单独打包（此时会忽略minRemainingSize、maxAsyncRequests、maxInitialRequests）
+    //   // cacheGroups: { // 组，哪些模块要打包到一个组
+    //   //   defaultVendors: { // 组名
+    //   //     test: /[\\/]node_modules[\\/]/, // 需要打包到一起的模块
+    //   //     priority: -10, // 权重（越大越高）
+    //   //     reuseExistingChunk: true, // 如果当前 chunk 包含已从主 bundle 中拆分出的模块，则它将被重用，而不是生成新的模块
+    //   //   },
+    //   //   default: { // 其他没有写的配置会使用上面的默认值
+    //   //     minChunks: 2, // 这里的minChunks权重更大
+    //   //     priority: -20,
+    //   //     reuseExistingChunk: true,
+    //   //   },
+    //   // },
+    //   // 修改配置
+    //   cacheGroups: {
+    //     // 组，哪些模块要打包到一个组
+    //     // defaultVendors: { // 组名
+    //     //   test: /[\\/]node_modules[\\/]/, // 需要打包到一起的模块
+    //     //   priority: -10, // 权重（越大越高）
+    //     //   reuseExistingChunk: true, // 如果当前 chunk 包含已从主 bundle 中拆分出的模块，则它将被重用，而不是生成新的模块
+    //     // },
+    //     default: {
+    //       // 其他没有写的配置会使用上面的默认值
+    //       minSize: 0, // 我们定义的文件体积太小了，所以要改打包的最小文件体积
+    //       minChunks: 2,
+    //       priority: -20,
+    //       reuseExistingChunk: true,
+    //     },
+    //   },
+    // },
+    splitChunks: {
+      chunks: "all", // 对所有模块都进行分割
+    },
+    // 提取runtime文件 用这个文件做一个映射 当有文件a依赖文件b 但文件b修改时 ab都会生成新的chunk 使用runtime运行时文件可以保证 runtime文件和b文件会改变 但是文件a名称不会改变 从而更好的利用浏览器缓存
+    runtimeChunk: {
+      name: (entrypoint) => `runtime~${entrypoint.name}`, // runtime文件命名规则
+    },
   },
   // 模式
   mode: 'production', // 开发模式
-  // devtool: "source-map"
+  devtool: "source-map"
 }
